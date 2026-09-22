@@ -4,6 +4,8 @@
 !.gitignore
 !LICENSE
 !pyproject.toml
+!uv.lock
+!.python-version
 !src/
 !src/**
 # Generated build/bytecode artifacts inside src stay ignored

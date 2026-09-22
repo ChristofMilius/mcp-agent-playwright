@@ -27,11 +27,11 @@ from mcp.server.mcpserver import MCPServer
 from playwright.async_api import Page, Playwright, async_playwright
 from pydantic import Field
 
-from mcp_playwright import __version__
-from mcp_playwright.locators import TargetError, resolve
+from mcp_agent_playwright import __version__
+from mcp_agent_playwright.locators import TargetError, resolve
 
 mcp = MCPServer(
-    "mcp-playwright",
+    "mcp-agent-playwright",
     version=__version__,
     instructions=(
         "Browser automation via Playwright. Start with browser_navigate, then "
