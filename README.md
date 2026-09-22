@@ -60,7 +60,8 @@ uv run mcp-agent-playwright
 {
   "mcpServers": {
     "playwright": {
-      "command": "I:/path/to/mcp_agent_playwright/.venv/Scripts/mcp-agent-playwright.exe"
+      "command": "uv",
+      "args": ["--project", "/path/to/mcp_agent_playwright", "run", "mcp-agent-playwright"]
     }
   }
 }
@@ -75,6 +76,9 @@ Start-Process -FilePath "C:\Program Files\BraveSoftware\Brave-Browser\Applicatio
   -ArgumentList '--remote-debugging-port=9222','--remote-allow-origins=*'
 ```
 
+Replace the `-FilePath` with your browser's actual path (Brave, Chrome, Edge,
+or any Chromium-based browser).
+
 Then set `MCP_PLAYWRIGHT_CDP_ENDPOINT` when starting the server (or in the
 MCP client config):
 
@@ -82,8 +86,9 @@ MCP client config):
 {
   "mcpServers": {
     "playwright": {
-      "command": ["I:/path/to/mcp_agent_playwright/.venv/Scripts/mcp-agent-playwright.exe"],
-      "environment": { "MCP_PLAYWRIGHT_CDP_ENDPOINT": "http://127.0.0.1:9222" }
+      "command": "uv",
+      "args": ["--project", "/path/to/mcp_agent_playwright", "run", "mcp-agent-playwright"],
+      "env": { "MCP_PLAYWRIGHT_CDP_ENDPOINT": "http://127.0.0.1:9222" }
     }
   }
 }
