@@ -1,0 +1,12 @@
+# Ignore everything by default
+*
+# Whitelist: un-ignore exactly what is versioned
+!.gitignore
+!LICENSE
+!pyproject.toml
+!src/
+!src/**
+# Generated build/bytecode artifacts inside src stay ignored
+src/**/__pycache__/
+src/**/*.pyc
+src/**/*.egg-info/
