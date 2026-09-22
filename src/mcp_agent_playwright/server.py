@@ -1,15 +1,23 @@
 """MCP Playwright server: exposes browser automation as MCP tools over stdio.
 
-The server lazily launches a Playwright browser on first use and keeps it alive
-between tool calls, so LM Studio agents can navigate, read snapshots, click,
-type, and screenshot pages.
+The server lazily starts a browser on first use and keeps it alive between tool
+calls, so LM Studio agents can navigate, read snapshots, click, type, and
+screenshot pages.
+
+Two operation modes:
+  - Own browser (default): launches a fresh Playwright browser.
+  - CDP attach: set MCP_PLAYWRIGHT_CDP_ENDPOINT (e.g. http://127.0.0.1:9222) to
+    connect over Chrome DevTools Protocol to an already-running browser (Brave,
+    Chrome, etc.). The server adopts the existing tabs and detaches on close —
+    it never shuts the user's browser down.
 
 Configuration via environment variables:
-  MCP_PLAYWRIGHT_HEADLESS     "1" (default) or "0" for a visible browser window
-  MCP_PLAYWRIGHT_BROWSER      chromium (default), firefox, or webkit
-  MCP_PLAYWRIGHT_VIEWPORT     "1280,900" (default)
-  MCP_PLAYWRIGHT_SCREENSHOT_DIR  where browser_screenshot saves files
-                               (default: ./screenshots)
+  MCP_PLAYWRIGHT_HEADLESS          "1" (default) or "0" for a visible browser window
+  MCP_PLAYWRIGHT_BROWSER           chromium (default), firefox, or webkit (own-browser mode only)
+  MCP_PLAYWRIGHT_VIEWPORT          "1280,900" (default)
+  MCP_PLAYWRIGHT_CDP_ENDPOINT      CDP URL to attach to instead of launching a browser
+  MCP_PLAYWRIGHT_SCREENSHOT_DIR    where browser_screenshot saves files
+                                   (default: ./screenshots)
 """
 
 from __future__ import annotations
@@ -47,9 +55,11 @@ mcp = MCPServer(
 _playwright: Playwright | None = None
 _browser: Any = None
 _context: Any = None
+_cdp_mode: bool = False
 _pages: list[Page] = []
 _ref_map: dict[int, dict[str, Any]] = {}
 _console_log: deque[tuple[str, str]] = deque(maxlen=200)
+_fallback_msgs: list[str] = []
 
 
 def _env_int(name: str) -> bool:
@@ -62,15 +72,33 @@ def _viewport() -> dict[str, int]:
 
 
 async def _ensure_browser() -> Any:
-    global _playwright, _browser, _context
+    global _playwright, _browser, _context, _cdp_mode
     if _browser is None:
         _playwright = await async_playwright().start()
-        browser_type = os.getenv("MCP_PLAYWRIGHT_BROWSER", "chromium")
-        _browser = await getattr(_playwright, browser_type).launch(
-            headless=_env_int("MCP_PLAYWRIGHT_HEADLESS")
-        )
-        _context = await _browser.new_context(viewport=_viewport())
-        _context.set_default_timeout(30_000)
+        cdp = os.getenv("MCP_PLAYWRIGHT_CDP_ENDPOINT", "").strip()
+        if cdp:
+            _cdp_mode = True
+            try:
+                _browser = await _playwright.chromium.connect_over_cdp(cdp)
+            except Exception as e:  # noqa: BLE001
+                _browser = None
+                _cdp_mode = False
+                _fallback_note = f"CDP endpoint {cdp} unreachable ({e}); using own browser"
+                _fallback_msgs.append(_fallback_note)
+            if _browser is not None:
+                contexts = getattr(_browser, "contexts", [])
+                _context = contexts[0] if contexts else await _browser.new_context()
+                _pages[:] = list(_context.pages)
+                for page in _pages:
+                    page.on("console", _on_console)
+        if _browser is None:
+            _cdp_mode = False
+            browser_type = os.getenv("MCP_PLAYWRIGHT_BROWSER", "chromium")
+            _browser = await getattr(_playwright, browser_type).launch(
+                headless=_env_int("MCP_PLAYWRIGHT_HEADLESS")
+            )
+            _context = await _browser.new_context(viewport=_viewport())
+            _context.set_default_timeout(30_000)
     return _context
 
 
@@ -100,15 +128,23 @@ def _on_console(msg: Any) -> None:
 
 
 async def _close_browser() -> None:
-    global _playwright, _browser, _context, _pages
+    global _playwright, _browser, _context, _pages, _cdp_mode
     if _browser is not None:
-        await _browser.close()
+        if not _cdp_mode:
+            await _browser.close()
+        else:
+            try:
+                await _browser.close()  # detaches from the CDP browser; does not kill it
+            except Exception:  # noqa: BLE001
+                pass
     if _playwright is not None:
         await _playwright.stop()
     _browser = _context = _playwright = None
+    _cdp_mode = False
     _pages = []
     _ref_map.clear()
     _console_log.clear()
+    _fallback_msgs.clear()
 
 
 def _atexit_close() -> None:
@@ -364,7 +400,12 @@ Use this first if you are unsure whether a browser is running.
         page = _current()
     except IndexError:
         return "No browser running. Call browser_navigate(url) to start one."
-    return (f"url: {page.url}\n"
+    mode = "cdp" if _cdp_mode else "own-browser"
+    head = f"mode: {mode}\n"
+    if mode == "own-browser" and _fallback_msgs:
+        head += "note: " + _fallback_msgs[-1] + "\n"
+    return (head +
+            f"url: {page.url}\n"
             f"title: {await page.title()}\n"
             f"tabs: {len(_pages)} (index {len(_pages) - 1} active)")
 
@@ -637,7 +678,10 @@ async def browser_console_messages(
 @mcp.tool()
 @_serialize
 async def browser_close() -> str:
-    """Shut down the browser and forget all state (tabs, refs, console log)."""
+    """Shut down the browser and forget all state (tabs, refs, console log).
+
+    In CDP mode this detaches from the attached browser without closing it.
+    """
     await _close_browser()
     return "Browser closed. Call browser_navigate to start a new session."
 
