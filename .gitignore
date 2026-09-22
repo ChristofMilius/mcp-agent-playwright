@@ -2,6 +2,7 @@
 *
 # Whitelist: un-ignore exactly what is versioned
 !.gitignore
+!README.md
 !LICENSE
 !pyproject.toml
 !uv.lock
