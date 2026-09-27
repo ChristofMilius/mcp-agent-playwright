@@ -23,9 +23,9 @@ several candidates exist.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
-from playwright.sync_api import Locator, Page
+from playwright.async_api import Locator, Page
 
 
 class TargetError(ValueError):
@@ -101,7 +101,12 @@ def _from_key(page: Page, key: str, value: str) -> Locator:
                     name = v.strip().strip('"')
                 elif k.strip().lower() == "exact":
                     exact = v.strip().lower() == "1"
-        loc = page.get_by_role(role, name=name if name else None, exact=exact)
+        # get_by_role types `role` as a ~60-member Literal that Playwright
+        # inlines per method and exports under no name, so there is nothing
+        # to cast to. The value comes from a caller-supplied target string.
+        # Note Playwright does not reject an unknown role; it simply matches
+        # nothing, so a bad role surfaces as an action timeout.
+        loc = page.get_by_role(cast(Any, role), name=name if name else None, exact=exact)
         return loc.nth(_nth(fields))
 
     bare = _bare_value(value)
