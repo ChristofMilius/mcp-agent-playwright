@@ -135,7 +135,9 @@ async def _close_browser() -> None:
         else:
             try:
                 await _browser.close()  # detaches from the CDP browser; does not kill it
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001, S110
+                # The attached browser may already be gone (the user closed
+                # it). A failed detach must not abort teardown of our state.
                 pass
     if _playwright is not None:
         await _playwright.stop()
@@ -150,7 +152,9 @@ async def _close_browser() -> None:
 def _atexit_close() -> None:
     try:
         asyncio.run(_close_browser())
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
+        # Interpreter shutdown: raising here would print a traceback and can
+        # change the exit code. Teardown is best-effort by definition.
         pass
 
 
@@ -584,7 +588,9 @@ async def browser_screenshot(
     try:
         out_dir = os.getenv("MCP_PLAYWRIGHT_SCREENSHOT_DIR", "screenshots")
         os.makedirs(out_dir, exist_ok=True)
-        name = filename.strip() or datetime.now().strftime("screenshot-%Y%m%d-%H%M%S.png")
+        # .astimezone() keeps the local wall clock in the name (a screenshot
+        # timestamp a human reads) while giving the value a tzinfo.
+        name = filename.strip() or datetime.now().astimezone().strftime("screenshot-%Y%m%d-%H%M%S.png")
         path = os.path.join(out_dir, name)
         page = await _get_page()
         await page.screenshot(path=path, full_page=full_page)
