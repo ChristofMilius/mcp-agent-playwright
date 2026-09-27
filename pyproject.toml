@@ -34,4 +34,9 @@ where = ["src"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+# Setting `venv` fixes library resolution but not the language version:
+# pyright still fell back to the `python` on PATH (3.11) instead of the
+# venv's 3.14, and rejected valid 3.12+ syntax. Pin it to match
+# .python-version.
+pythonVersion = "3.14"
 include = ["src"]
