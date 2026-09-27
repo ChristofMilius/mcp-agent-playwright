@@ -20,7 +20,7 @@ dependencies = [
 # Contributor tooling. A dependency group (PEP 735), not an optional
 # extra: `uv run` installs groups by default but ignores extras, so the
 # README's `uv run ruff check .` / `uv run pytest -q` only resolve here.
-dev = ["pytest>=8", "ruff>=0.16"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pyright>=1.1.400", "ruff>=0.16"]
 
 [project.scripts]
 mcp-agent-playwright = "mcp_agent_playwright.server:main"
@@ -39,4 +39,15 @@ venv = ".venv"
 # venv's 3.14, and rejected valid 3.12+ syntax. Pin it to match
 # .python-version.
 pythonVersion = "3.14"
-include = ["src"]
+include = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# The session-scoped Chromium fixture can only be driven from the same event
+# loop the tests run on, so pin both to the session scope.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = [
+    "browser: needs a Playwright browser binary; skipped when none is installed",
+]

@@ -118,9 +118,16 @@ again after actions.
 ## Development
 
 ```powershell
-uv run ruff check .
-uv run pytest -q
+uv run ruff check .     # lint
+uv run pyright          # type check (src + tests, against .venv)
+uv run pytest -q        # tests
 ```
+
+`uv sync` installs the dev tooling (pytest, pytest-asyncio, pyright, ruff).
+The suite has two tiers: plain unit tests that need no browser, and tests
+marked `browser` that drive a real headless Chromium. The browser tier needs
+`uv run playwright install chromium` once; until then those tests **skip**
+rather than fail. CI installs Chromium, so nothing skips there.
 
 ## License
 

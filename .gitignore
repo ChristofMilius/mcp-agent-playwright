@@ -9,7 +9,13 @@
 !.python-version
 !src/
 !src/**
+!tests/
+!tests/**
+!.github/
+!.github/**
 # Generated build/bytecode artifacts inside src stay ignored
 src/**/__pycache__/
 src/**/*.pyc
 src/**/*.egg-info/
+tests/**/__pycache__/
+tests/**/*.pyc
