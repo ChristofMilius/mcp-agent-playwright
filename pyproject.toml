@@ -16,8 +16,11 @@ dependencies = [
     "playwright>=1.45",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8"]
+[dependency-groups]
+# Contributor tooling. A dependency group (PEP 735), not an optional
+# extra: `uv run` installs groups by default but ignores extras, so the
+# README's `uv run ruff check .` / `uv run pytest -q` only resolve here.
+dev = ["pytest>=8", "ruff>=0.16"]
 
 [project.scripts]
 mcp-agent-playwright = "mcp_agent_playwright.server:main"
