@@ -64,20 +64,16 @@ async def test_xpath_key_hover(page: Page) -> None:
     await loc.hover(timeout=TIMEOUT)
 
 
-async def test_xpath_prefix_form_is_not_routed_to_xpath(page: Page) -> None:
-    """Documents a real quirk: ``xpath://h1`` does not reach the xpath handler.
+async def test_xpath_prefix_form_routes_to_xpath(page: Page) -> None:
+    """``xpath://h1`` reaches the xpath handler and resolves the heading.
 
-    ``resolve`` tests ``raw[:5]`` against six-character prefixes, so ``xpath:``
-    never matches and the string is handed to Playwright as a bare selector.
-    Playwright then parses ``xpath://h1`` -- ``xpath=`` is not a recognised
-    engine prefix, so this is an invalid CSS selector and the locator times
-    out. Pinned here so a future fix to the prefix slice shows up as a change
-    in this test rather than silently altering behaviour.
+    ``resolve`` used to test ``raw[:5]`` against six-character prefixes, so
+    every prefix except ``text:`` was unreachable and this string was handed
+    to Playwright as a bare CSS selector, which fails to parse.
     """
     loc, how = resolve(page, "xpath://h1", {})
     assert how == "xpath://h1"
-    with pytest.raises(Exception, match="Unexpected token"):
-        await loc.click(timeout=1_500)
+    assert await loc.inner_text() == "Hello world"
 
 
 async def test_bare_selector_clicks(page: Page) -> None:
@@ -98,16 +94,21 @@ async def test_nth_selects_the_right_element(page: Page) -> None:
     assert await loc.inner_text() == "two"
 
 
-async def test_nth_known_limitation_ignored_for_css(page: Page) -> None:
-    """Known quirk: ``nth=`` is silently ignored by the ``css=`` form.
+async def test_nth_applies_to_css_and_xpath(page: Page) -> None:
+    """``nth=`` is honoured by every form, including ``css=`` and ``xpath=``.
 
-    ``_from_key`` hardcodes ``.first`` for ``css=`` (and ``xpath=``), so
-    ``css=li,nth=3`` resolves to the *first* match, not the third -- even
-    though the module docstring advertises ``nth=`` generally. Pinned as a
-    characterisation test: if this ever starts returning "three", the
-    behaviour changed and the docstring/limitation note needs revisiting.
+    Both used to hardcode ``.first``, so ``css=li,nth=3`` silently returned
+    the first match while the module docstring advertised ``nth=`` generally.
     """
-    loc, _ = resolve(page, "css=li,nth=3", {})
+    css_loc, _ = resolve(page, "css=li,nth=3", {})
+    assert await css_loc.inner_text() == "three"
+
+    xpath_loc, _ = resolve(page, "xpath=//li,nth=3", {})
+    assert await xpath_loc.inner_text() == "three"
+
+
+async def test_css_without_nth_still_returns_the_first_match(page: Page) -> None:
+    loc, _ = resolve(page, "css=li", {})
     assert await loc.inner_text() == "one"
 
 

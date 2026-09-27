@@ -173,8 +173,21 @@ def test_resolve_css() -> None:
     page = FakePage()
     _, how = resolve(page, "css=#main", {})  # type: ignore[arg-type]
     assert page.calls == [("locator", "#main")]
-    assert page.last is not None and page.last.chain == ["first"]
+    assert page.last is not None and page.last.chain == [("nth", 0)]
     assert how == "css=#main"
+
+
+def test_resolve_css_with_nth() -> None:
+    page = FakePage()
+    resolve(page, "css=#main,nth=3", {})  # type: ignore[arg-type]
+    assert page.last is not None and page.last.chain == [("nth", 2)]
+
+
+def test_resolve_xpath_with_nth() -> None:
+    page = FakePage()
+    resolve(page, "xpath=//li,nth=2", {})  # type: ignore[arg-type]
+    assert page.calls == [("locator", "xpath=//li")]
+    assert page.last is not None and page.last.chain == [("nth", 1)]
 
 
 def test_resolve_text() -> None:
@@ -185,32 +198,31 @@ def test_resolve_text() -> None:
 
 
 def test_resolve_text_with_exact_and_nth() -> None:
-    """Known bug: with several trailing fields, only the first is stripped.
+    """Every trailing field token is stripped, not just the first one found.
 
-    ``_bare_value`` checks its markers in a fixed order and splits on the first
-    match, so for ``"Hello,exact=1,nth=3"`` it splits at ``,nth=`` and leaves
-    ``exact=1`` glued to the value. The caller then searches for the literal
-    text "Hello,exact=1", which matches nothing. Same for any
-    ``name=``/``exact=`` combination ordered before ``nth=``.
-
-    Characterisation test: it pins the current behaviour. If this ever starts
-    receiving ``"Hello"``, the bug is fixed and this expectation is wrong.
+    ``text=Hello,exact=1,nth=3`` must search for the text ``Hello`` with exact
+    matching at index 2. An earlier version returned on the first marker it
+    found, leaving ``Hello,exact=1`` as the search value (which matches
+    nothing).
     """
     page = FakePage()
     resolve(page, "text=Hello,exact=1,nth=3", {})  # type: ignore[arg-type]
-    # nth=3 -> index 2 is applied correctly; only the value is mangled.
-    assert page.calls == [("get_by_text", "Hello,exact=1", True)]
+    assert page.calls == [("get_by_text", "Hello", True)]
     assert page.last is not None and page.last.chain == [("nth", 2)]
 
 
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("Hello,exact=1", "Hello"),  # single trailing field: fine
-        ("Hello,nth=2", "Hello"),  # single trailing field: fine
+        ("Hello", "Hello"),
+        ("Hello,exact=1", "Hello"),
+        ("Hello,nth=2", "Hello"),
+        ("Hello,exact=1,nth=3", "Hello"),
+        ("Hello,nth=3,exact=1", "Hello"),
+        ('"Hello",exact=1', "Hello"),
     ],
 )
-def test_bare_value_single_trailing_field_is_correct(value: str, expected: str) -> None:
+def test_bare_value_strips_all_trailing_fields(value: str, expected: str) -> None:
     assert _bare_value(value) == expected
 
 
@@ -285,14 +297,29 @@ def test_resolve_prefix_form(prefix: str) -> None:
 
 
 def test_resolve_prefix_form_xpath() -> None:
-    """``xpath://button`` -- documents what the prefix branch actually does.
+    """``xpath://button`` routes to the xpath handler, not to bare CSS.
 
-    ``resolve`` tests ``raw[:5]`` against 6-character prefixes, so ``xpath:``
-    (six chars) never matches and falls through to the bare-CSS path.
+    ``resolve`` used to test ``raw[:5]`` against six-character prefixes, so
+    every prefix except ``text:`` (five characters) was unreachable.
     """
     page = FakePage()
     resolve(page, "xpath://button", {})  # type: ignore[arg-type]
-    assert page.calls == [("locator", "xpath://button")]
+    assert page.calls == [("locator", "xpath=//button")]
+
+
+@pytest.mark.parametrize(
+    ("target", "call"),
+    [
+        ("css:#main", ("locator", "#main")),
+        ("xpath://li", ("locator", "xpath=//li")),
+        ("label:Name", ("get_by_label", "Name", False)),
+        ("title:Tip", ("get_by_title", "Tip")),
+    ],
+)
+def test_resolve_prefix_form_routes_to_handler(target: str, call: tuple[str, ...]) -> None:
+    page = FakePage()
+    resolve(page, target, {})  # type: ignore[arg-type]
+    assert page.calls == [call]
 
 
 def test_resolve_unknown_key_falls_through_to_css() -> None:

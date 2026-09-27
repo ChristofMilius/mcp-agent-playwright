@@ -66,9 +66,9 @@ def resolve(page: Page, target: str, ref_map: dict[int, dict[str, Any]]) -> tupl
         if key in _SUPPORTED:
             return _from_key(page, key, value.strip()), raw
 
-    if raw[:5] in ("css:", "text:", "xpath:", "label:", "title:"):
-        key, _, value = raw.partition(":")
-        return _from_key(page, key.strip().lower(), value.strip()), raw
+    for prefix in ("css:", "text:", "xpath:", "label:", "title:"):
+        if raw.startswith(prefix):
+            return _from_key(page, prefix[:-1], raw[len(prefix) :].strip()), raw
 
     return page.locator(raw).first, raw
 
@@ -112,9 +112,9 @@ def _from_key(page: Page, key: str, value: str) -> Locator:
     bare = _bare_value(value)
 
     if key == "css":
-        return page.locator(bare).first
+        return page.locator(bare).nth(_nth(fields))
     if key == "xpath":
-        return page.locator(f"xpath={bare}").first
+        return page.locator(f"xpath={bare}").nth(_nth(fields))
     if key == "text":
         return page.get_by_text(bare, exact=_exact(fields)).nth(_nth(fields))
     if key == "label":
@@ -127,11 +127,19 @@ def _from_key(page: Page, key: str, value: str) -> Locator:
 
 
 def _bare_value(value: str) -> str:
-    """Value with trailing field tokens (``name=``, ``nth=``, ``exact=``) removed."""
-    for marker in (",nth=", ",exact=", ", name=", ",Name="):
-        if marker in value:
-            return value.split(marker, 1)[0].strip().strip('"')
-    return value.strip().strip('"')
+    """Value with trailing field tokens (``name=``, ``nth=``, ``exact=``) removed.
+
+    Loops rather than returning on the first hit: a value may carry several
+    tokens (``text=Hello,exact=1,nth=3``) and stopping early would leave the
+    remaining ones glued to the value.
+    """
+    while True:
+        for marker in (",nth=", ",exact=", ", name=", ",Name="):
+            if marker in value:
+                value = value.split(marker, 1)[0]
+                break
+        else:
+            return value.strip().strip('"')
 
 
 def _split_fields(value: str) -> dict[str, str]:
