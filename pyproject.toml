@@ -31,4 +31,4 @@ where = ["src"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["src", "tests"]
+include = ["src"]
